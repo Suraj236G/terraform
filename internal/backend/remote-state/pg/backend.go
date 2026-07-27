@@ -5,7 +5,6 @@ package pg
 
 import (
 	"database/sql"
-	"fmt"
 
 	"github.com/lib/pq"
 	"github.com/zclconf/go-cty/cty"
@@ -100,13 +99,10 @@ func (b *Backend) Configure(configVal cty.Value) tfdiags.Diagnostics {
 	}
 
 	// Prepare database schema, tables, & indexes.
-	var query string
-
 	if !data.Bool("skip_schema_creation") {
 		// list all schemas to see if it exists
 		var count int
-		query = `select count(1) from information_schema.schemata where schema_name = $1`
-		if err := db.QueryRow(query, data.String("schema_name")).Scan(&count); err != nil {
+		if err := db.QueryRow(`select count(1) from information_schema.schemata where schema_name = $1`, data.String("schema_name")).Scan(&count); err != nil {
 			return backendbase.ErrorAsDiagnostics(err)
 		}
 
@@ -115,8 +111,7 @@ func (b *Backend) Configure(configVal cty.Value) tfdiags.Diagnostics {
 		// a user hasn't been granted the `CREATE SCHEMA` privilege
 		if count < 1 {
 			// tries to create the schema
-			query = `CREATE SCHEMA IF NOT EXISTS %s`
-			if _, err := db.Exec(fmt.Sprintf(query, b.schemaName)); err != nil {
+			if _, err := db.Exec("CREATE SCHEMA IF NOT EXISTS " + b.schemaName); err != nil {
 				return backendbase.ErrorAsDiagnostics(err)
 			}
 		}
@@ -127,19 +122,17 @@ func (b *Backend) Configure(configVal cty.Value) tfdiags.Diagnostics {
 			return backendbase.ErrorAsDiagnostics(err)
 		}
 
-		query = `CREATE TABLE IF NOT EXISTS %s.%s (
+		if _, err := db.Exec("CREATE TABLE IF NOT EXISTS " + b.schemaName + "." + statesTableName + ` (
 			id bigint NOT NULL DEFAULT nextval('public.global_states_id_seq') PRIMARY KEY,
 			name text UNIQUE,
 			data text
-			)`
-		if _, err := db.Exec(fmt.Sprintf(query, b.schemaName, statesTableName)); err != nil {
+			)`); err != nil {
 			return backendbase.ErrorAsDiagnostics(err)
 		}
 	}
 
 	if !data.Bool("skip_index_creation") {
-		query = `CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s.%s (name)`
-		if _, err := db.Exec(fmt.Sprintf(query, statesIndexName, b.schemaName, statesTableName)); err != nil {
+		if _, err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS " + statesIndexName + " ON " + b.schemaName + "." + statesTableName + " (name)"); err != nil {
 			return backendbase.ErrorAsDiagnostics(err)
 		}
 	}
