@@ -321,6 +321,17 @@ func (b *Local) Operation(ctx context.Context, op *backendrun.Operation) (*backe
 	// Lock
 	b.opLock.Lock()
 
+	// unlocked is used to transfer unlock responsibility from this function
+	// to the goroutine below. If the goroutine is never launched (e.g. due
+	// to a panic during setup), the deferred unlock here ensures the mutex
+	// is always released and prevents a deadlock on subsequent calls.
+	unlocked := false
+	defer func() {
+		if !unlocked {
+			b.opLock.Unlock()
+		}
+	}()
+
 	// Build our running operation
 	// the runninCtx is only used to block until the operation returns.
 	runningCtx, done := context.WithCancel(context.Background())
@@ -340,6 +351,8 @@ func (b *Local) Operation(ctx context.Context, op *backendrun.Operation) (*backe
 	op.StateLocker = op.StateLocker.WithContext(stopCtx)
 
 	// Do it
+	// Transfer unlock responsibility to the goroutine before launching it.
+	unlocked = true
 	go func() {
 		defer logging.PanicHandler()
 		defer done()
