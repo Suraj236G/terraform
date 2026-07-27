@@ -56,4 +56,8 @@ COPY LICENSE "/usr/share/doc/${BIN_NAME}/LICENSE.txt"
 # other official release channels.
 COPY ["dist/linux/${TARGETARCH}/terraform", "/bin/terraform"]
 
+RUN addgroup -S terraform && adduser -S -G terraform terraform
+
+USER terraform
+
 ENTRYPOINT ["/bin/terraform"]
