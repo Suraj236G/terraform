@@ -23,4 +23,8 @@ COPY . .
 RUN /bin/bash ./scripts/build.sh
 
 WORKDIR $GOPATH
+
+RUN adduser -D -u 1001 terraform
+USER terraform
+
 ENTRYPOINT ["terraform"]
