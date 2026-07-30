@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/hashicorp/go-azure-helpers/lang/response"
@@ -55,7 +56,11 @@ func (c *RemoteClient) Get() (*remote.Payload, tfdiags.Diagnostics) {
 	ctx := newCtx()
 	blob, err := c.giovanniBlobClient.Get(ctx, c.containerName, c.keyName, options)
 	if err != nil {
-		if response.WasNotFound(blob.HttpResponse) {
+		var httpResponse *http.Response
+		if blob != nil {
+			httpResponse = blob.HttpResponse
+		}
+		if response.WasNotFound(httpResponse) {
 			return nil, nil
 		}
 		return nil, diags.Append(err)
