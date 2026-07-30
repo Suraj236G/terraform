@@ -6,7 +6,9 @@ package rpcapi
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/apparentlymart/go-versions/versions"
 	"github.com/hashicorp/go-plugin"
@@ -72,6 +74,25 @@ func unconfiguredProviderPluginInstance(cached *providercache.CachedProvider) (p
 	execFile, err := cached.ExecutableFile()
 	if err != nil {
 		return nil, err
+	}
+
+	// Resolve the executable path to an absolute, clean path to prevent
+	// path traversal attacks before passing it to exec.Command.
+	execFile, err = filepath.Abs(execFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve provider executable path: %w", err)
+	}
+	execFile = filepath.Clean(execFile)
+
+	// Confirm the resolved executable path is within the expected provider
+	// package directory, preventing execution of binaries outside the cache.
+	packageDir, err := filepath.Abs(cached.PackageDir)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve provider package directory: %w", err)
+	}
+	packageDir = filepath.Clean(packageDir)
+	if !strings.HasPrefix(execFile, packageDir+string(filepath.Separator)) {
+		return nil, fmt.Errorf("provider executable %q is not within the expected package directory %q", execFile, packageDir)
 	}
 
 	config := &plugin.ClientConfig{
