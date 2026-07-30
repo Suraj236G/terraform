@@ -41,6 +41,20 @@ type binary struct {
 // this function will panic. Tests should be written to assume that this
 // function always succeeds.
 func NewBinary(t *testing.T, binaryPath, workingDir string) *binary {
+	// Validate binaryPath to prevent exec.Command from receiving a non-static,
+	// potentially tainted command path (guards against code injection).
+	cleanBinPath := filepath.Clean(binaryPath)
+	if !filepath.IsAbs(cleanBinPath) {
+		panic(fmt.Sprintf("e2e: binaryPath must be an absolute path, got: %q", binaryPath))
+	}
+	info, err := os.Stat(cleanBinPath)
+	if err != nil {
+		panic(fmt.Sprintf("e2e: binaryPath %q is not accessible: %v", cleanBinPath, err))
+	}
+	if !info.Mode().IsRegular() {
+		panic(fmt.Sprintf("e2e: binaryPath %q is not a regular file", cleanBinPath))
+	}
+
 	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		panic(err)
@@ -107,7 +121,7 @@ func NewBinary(t *testing.T, binaryPath, workingDir string) *binary {
 	}
 
 	return &binary{
-		binPath: binaryPath,
+		binPath: cleanBinPath,
 		workDir: tmpDir,
 	}
 }
