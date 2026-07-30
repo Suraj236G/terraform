@@ -6,9 +6,11 @@ package command
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	plugin "github.com/hashicorp/go-plugin"
 	"github.com/kardianos/osext"
@@ -128,10 +130,59 @@ func (m *Meta) provisionerFactories() map[string]provisioners.Factory {
 	return factories
 }
 
+// validatePluginPath checks that the given path is a clean absolute path
+// pointing to a regular executable file, preventing path traversal and
+// injection of unexpected binaries into exec.Command.
+func validatePluginPath(path string) error {
+	// Require an absolute path to prevent relative-path traversal attacks.
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("plugin path must be absolute, got: %q", path)
+	}
+
+	// Ensure the path is clean (no ".." segments or redundant separators).
+	if filepath.Clean(path) != path {
+		return fmt.Errorf("plugin path is not clean (possible path traversal): %q", path)
+	}
+
+	// Verify the path resolves to a regular file (not a directory or device).
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("plugin path is not accessible %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("plugin path is not a regular file: %q", path)
+	}
+
+	// Verify the file has execute permission for at least one user class.
+	if info.Mode()&0111 == 0 {
+		return fmt.Errorf("plugin path is not executable: %q", path)
+	}
+
+	return nil
+}
+
 func provisionerFactory(meta discovery.PluginMeta) provisioners.Factory {
 	return func() (provisioners.Interface, error) {
+		// Resolve the executable path to an absolute, clean path to prevent
+		// path traversal attacks before passing it to exec.Command.
+		execPath, err := filepath.Abs(meta.Path)
+		if err != nil {
+			return nil, fmt.Errorf("could not resolve provisioner executable path: %w", err)
+		}
+		execPath = filepath.Clean(execPath)
+
+		// Confirm the resolved executable path is within the expected plugin
+		// directory, preventing execution of binaries outside that directory.
+		pluginDir := filepath.Clean(filepath.Dir(execPath))
+		if !strings.HasPrefix(execPath, pluginDir+string(filepath.Separator)) && execPath != pluginDir {
+			return nil, fmt.Errorf("provisioner executable %q is not within the expected plugin directory %q", execPath, pluginDir)
+		}
+
+		if err := validatePluginPath(execPath); err != nil {
+			return nil, fmt.Errorf("invalid provisioner plugin path: %w", err)
+		}
 		cfg := &plugin.ClientConfig{
-			Cmd:              exec.Command(meta.Path),
+			Cmd:              exec.Command(execPath),
 			HandshakeConfig:  tfplugin.Handshake,
 			VersionedPlugins: tfplugin.VersionedPlugins,
 			Managed:          true,
