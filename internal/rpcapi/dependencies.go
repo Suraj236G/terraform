@@ -686,6 +686,11 @@ func providerFactoriesForLocks(locks *depsfile.Locks, pluginsDir *providercache.
 			err = errors.Join(err, fmt.Errorf("unusuable cached package for %s v%s: %w", addr, selectedVersion, exeErr))
 			continue
 		}
+		exeFilename = filepath.Clean(exeFilename)
+		if !filepath.IsAbs(exeFilename) {
+			err = errors.Join(err, fmt.Errorf("executable path for %s v%s is not absolute: %s", addr, selectedVersion, exeFilename))
+			continue
+		}
 
 		ret[addr] = func() (providers.Interface, error) {
 			config := &plugin.ClientConfig{
