@@ -48,7 +48,7 @@ type MockClient struct {
 
 func (p *MockClient) beginWrite() func() {
 	p.mu.Lock()
-	return p.mu.Unlock
+	return func() { p.mu.Unlock() }
 }
 
 func (p *MockClient) Setup(ctx context.Context, req SetupRequest) (resp SetupResponse) {
