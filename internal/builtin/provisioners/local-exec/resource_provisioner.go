@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/armon/circbuf"
@@ -148,8 +149,56 @@ func (p *provisioner) ProvisionResource(req provisioners.ProvisionResourceReques
 	cmdEnv = os.Environ()
 	cmdEnv = append(cmdEnv, env...)
 
+	// Validate the executable before use to guard against code injection via a
+	// non-static interpreter path supplied by user configuration. Only absolute
+	// paths are accepted; relative paths are rejected to prevent PATH-hijacking
+	// attacks where an attacker controls a directory earlier in PATH.
+	executable := cmdargs[0]
+	if !filepath.IsAbs(executable) {
+		// For non-absolute paths, resolve via PATH and verify the result is
+		// still absolute so the caller can see exactly what will be executed.
+		resolved, lookErr := exec.LookPath(executable)
+		if lookErr != nil {
+			resp.Diagnostics = resp.Diagnostics.Append(tfdiags.WholeContainingBody(
+				tfdiags.Error,
+				"local-exec provisioner error",
+				fmt.Sprintf("The interpreter executable %q could not be found on PATH: %s", executable, lookErr),
+			))
+			return resp
+		}
+		absResolved, absErr := filepath.Abs(resolved)
+		if absErr != nil || !filepath.IsAbs(absResolved) {
+			resp.Diagnostics = resp.Diagnostics.Append(tfdiags.WholeContainingBody(
+				tfdiags.Error,
+				"local-exec provisioner error",
+				fmt.Sprintf("The interpreter executable %q did not resolve to an absolute path. Use an absolute path to prevent ambiguous execution.", executable),
+			))
+			return resp
+		}
+		executable = absResolved
+	} else {
+		// For absolute paths, confirm the target exists and is a regular file.
+		info, statErr := os.Stat(executable)
+		if statErr != nil {
+			resp.Diagnostics = resp.Diagnostics.Append(tfdiags.WholeContainingBody(
+				tfdiags.Error,
+				"local-exec provisioner error",
+				fmt.Sprintf("The interpreter executable %q does not exist or is not accessible: %s", executable, statErr),
+			))
+			return resp
+		}
+		if !info.Mode().IsRegular() {
+			resp.Diagnostics = resp.Diagnostics.Append(tfdiags.WholeContainingBody(
+				tfdiags.Error,
+				"local-exec provisioner error",
+				fmt.Sprintf("The interpreter executable %q is not a regular file.", executable),
+			))
+			return resp
+		}
+	}
+
 	// Set up the command
-	cmd := exec.CommandContext(p.ctx, cmdargs[0], cmdargs[1:]...)
+	cmd := exec.CommandContext(p.ctx, executable, cmdargs[1:]...)
 	cmd.Stderr = pw
 	cmd.Stdout = pw
 	// Dir specifies the working directory of the command.
