@@ -104,6 +104,18 @@ func (c *StacksCommand) realRun(args []string, stdout, stderr io.Writer) int {
 		return ExitPluginError
 	}
 
+	// Validate the plugin binary path before execution to prevent code injection.
+	// The path must be absolute (to avoid PATH hijacking) and must refer to an
+	// existing regular file (not a directory or missing file).
+	if !path.IsAbs(c.pluginBinary) {
+		fmt.Fprintf(stderr, "Stacks plugin binary path is not absolute: %q", c.pluginBinary)
+		return ExitStacksPluginError
+	}
+	if info, err := os.Stat(c.pluginBinary); err != nil || !info.Mode().IsRegular() {
+		fmt.Fprintf(stderr, "Stacks plugin binary not found or is not a regular file: %q", c.pluginBinary)
+		return ExitStacksPluginError
+	}
+
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  StacksHandshake,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
