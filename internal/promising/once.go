@@ -71,9 +71,12 @@ func (o *Once[T]) Do(ctx context.Context, name string, f func(ctx context.Contex
 		o.mu.Unlock()
 	}
 
+	// Capture the getter after the mutex has been released on both branches
+	// above, then block on the promise resolution outside the lock.
 	// Regardless of whether we launched the async task or not, we'll
 	// wait for it to resolve the promise before we return.
-	return o.get(ctx)
+	get := o.get
+	return get(ctx)
 }
 
 // PromiseID returns the unique identifier for the backing promise of the
