@@ -138,7 +138,7 @@ func (c *RemoteClient) Delete() tfdiags.Diagnostics {
 	ctx := newCtx()
 	resp, err := c.giovanniBlobClient.Delete(ctx, c.containerName, c.keyName, options)
 	if err != nil {
-		if !response.WasNotFound(resp.HttpResponse) {
+		if resp.HttpResponse == nil || !response.WasNotFound(resp.HttpResponse) {
 			return diags.Append(err)
 		}
 	}
