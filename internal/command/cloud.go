@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 
 	"google.golang.org/grpc/metadata"
@@ -77,6 +78,18 @@ func (c *CloudCommand) realRun(args []string, stdout, stderr io.Writer) int {
 		c.View.Diagnostics(diags)
 	}
 	if diags.HasErrors() {
+		return ExitPluginError
+	}
+
+	// Validate that the resolved plugin binary path is absolute and refers to
+	// a regular file before executing it, to prevent code injection via a
+	// manipulated path (e.g. through TF_CLOUD_PLUGIN_DEV_OVERRIDE).
+	if !filepath.IsAbs(c.pluginBinary) {
+		fmt.Fprintf(stderr, "Cloud plugin binary path is not absolute: %q", c.pluginBinary)
+		return ExitPluginError
+	}
+	if info, err := os.Stat(c.pluginBinary); err != nil || !info.Mode().IsRegular() {
+		fmt.Fprintf(stderr, "Cloud plugin binary not found or is not a regular file: %q", c.pluginBinary)
 		return ExitPluginError
 	}
 
