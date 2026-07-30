@@ -112,7 +112,7 @@ func (c *RemoteClient) Put(data []byte) tfdiags.Diagnostics {
 
 	blob, err := c.giovanniBlobClient.GetProperties(ctx, c.containerName, c.keyName, getOptions)
 	if err != nil {
-		if !response.WasNotFound(blob.HttpResponse) {
+		if blob.HttpResponse == nil || !response.WasNotFound(blob.HttpResponse) {
 			return diags.Append(err)
 		}
 	}
