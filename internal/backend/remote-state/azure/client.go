@@ -180,7 +180,7 @@ func (c *RemoteClient) Lock(info *statemgr.LockInfo) (string, error) {
 	properties, err := c.giovanniBlobClient.GetProperties(ctx, c.containerName, c.keyName, blobs.GetPropertiesInput{})
 	if err != nil {
 		// error if we had issues getting the blob
-		if !response.WasNotFound(properties.HttpResponse) {
+		if properties.HttpResponse == nil || !response.WasNotFound(properties.HttpResponse) {
 			return "", getLockInfoErr(err)
 		}
 		// if we don't find the blob, we need to build it
