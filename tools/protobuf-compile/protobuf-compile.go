@@ -258,34 +258,43 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	protocExec, err = exec.LookPath(protocExec)
+	if err != nil {
+		log.Fatalf("protoc executable not found or not executable: %s", err)
+	}
 	protocGenGoExec, err = filepath.Abs(protocGenGoExec)
 	if err != nil {
 		log.Fatal(err)
+	}
+	protocGenGoExec, err = exec.LookPath(protocGenGoExec)
+	if err != nil {
+		log.Fatalf("protoc-gen-go executable not found or not executable: %s", err)
 	}
 	protocGenGoGrpcExec, err = filepath.Abs(protocGenGoGrpcExec)
 	if err != nil {
 		log.Fatal(err)
 	}
+	protocGenGoGrpcExec, err = exec.LookPath(protocGenGoGrpcExec)
+	if err != nil {
+		log.Fatalf("protoc-gen-go-grpc executable not found or not executable: %s", err)
+	}
 
 	// For all of our steps we'll run our localized protoc with our localized
 	// protoc-gen-go.
-	baseCmdLine := []string{protocExec, "--plugin=" + protocGenGoExec, "--plugin=" + protocGenGoGrpcExec}
+	baseArgs := []string{"--plugin=" + protocGenGoExec, "--plugin=" + protocGenGoGrpcExec}
 
 	for _, step := range protocSteps {
 		log.Printf("working on %s", step.DisplayName)
 
-		cmdLine := make([]string, 0, len(baseCmdLine)+len(step.Args))
-		cmdLine = append(cmdLine, baseCmdLine...)
-		cmdLine = append(cmdLine, step.Args...)
+		args := make([]string, 0, len(baseArgs)+len(step.Args))
+		args = append(args, baseArgs...)
+		args = append(args, step.Args...)
 
-		cmd := &exec.Cmd{
-			Path:   cmdLine[0],
-			Args:   cmdLine,
-			Dir:    step.WorkDir,
-			Env:    os.Environ(),
-			Stdout: os.Stdout,
-			Stderr: os.Stderr,
-		}
+		cmd := exec.Command(protocExec, args...)
+		cmd.Dir = step.WorkDir
+		cmd.Env = os.Environ()
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		log.Printf("running command: %s", cmd.String())
 		wd, _ := os.Getwd()
 		log.Printf("from directory: %s", wd)
