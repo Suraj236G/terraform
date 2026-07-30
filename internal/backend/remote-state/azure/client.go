@@ -178,9 +178,10 @@ func (c *RemoteClient) Lock(info *statemgr.LockInfo) (string, error) {
 
 	// obtain properties to see if the blob lease is already in use. If the blob doesn't exist, create it
 	properties, err := c.giovanniBlobClient.GetProperties(ctx, c.containerName, c.keyName, blobs.GetPropertiesInput{})
+	blobCreated := false
 	if err != nil {
 		// error if we had issues getting the blob
-		if !response.WasNotFound(properties.HttpResponse) {
+		if properties.HttpResponse == nil || !response.WasNotFound(properties.HttpResponse) {
 			return "", getLockInfoErr(err)
 		}
 		// if we don't find the blob, we need to build it
@@ -194,10 +195,12 @@ func (c *RemoteClient) Lock(info *statemgr.LockInfo) (string, error) {
 		if err != nil {
 			return "", getLockInfoErr(err)
 		}
+		blobCreated = true
 	}
 
 	// if the blob is already locked then error
-	if properties.LeaseStatus == blobs.Locked {
+	// skip this check for a newly created blob as it cannot have an existing lease
+	if !blobCreated && properties.LeaseStatus == blobs.Locked {
 		return "", getLockInfoErr(fmt.Errorf("state blob is already locked"))
 	}
 
