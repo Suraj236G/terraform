@@ -807,6 +807,16 @@ func (b *Remote) Operation(ctx context.Context, op *backendrun.Operation) (*back
 	// Lock
 	b.opLock.Lock()
 
+	// goroutineLaunched tracks whether the goroutine below has taken ownership
+	// of the lock. If the function returns before the goroutine is started,
+	// the deferred unlock here ensures the mutex is always released.
+	goroutineLaunched := false
+	defer func() {
+		if !goroutineLaunched {
+			b.opLock.Unlock()
+		}
+	}()
+
 	// Build our running operation
 	// the runninCtx is only used to block until the operation returns.
 	runningCtx, done := context.WithCancel(context.Background())
@@ -825,6 +835,7 @@ func (b *Remote) Operation(ctx context.Context, op *backendrun.Operation) (*back
 	runningOp.Cancel = cancel
 
 	// Do it.
+	goroutineLaunched = true
 	go func() {
 		defer logging.PanicHandler()
 		defer done()
