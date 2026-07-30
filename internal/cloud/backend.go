@@ -937,6 +937,16 @@ func (b *Cloud) Operation(ctx context.Context, op *backendrun.Operation) (*backe
 	// Lock
 	b.opLock.Lock()
 
+	// goroutineStarted tracks whether the goroutine below has been launched.
+	// If it is never started (e.g. due to a panic), the deferred unlock in the
+	// outer function ensures the mutex is always released.
+	goroutineStarted := false
+	defer func() {
+		if !goroutineStarted {
+			b.opLock.Unlock()
+		}
+	}()
+
 	// Build our running operation
 	// the runninCtx is only used to block until the operation returns.
 	runningCtx, done := context.WithCancel(context.Background())
@@ -955,6 +965,7 @@ func (b *Cloud) Operation(ctx context.Context, op *backendrun.Operation) (*backe
 	runningOp.Cancel = cancel
 
 	// Do it.
+	goroutineStarted = true
 	go func() {
 		defer done()
 		defer stop()
